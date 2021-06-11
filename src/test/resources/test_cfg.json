@@ -1,0 +1,23 @@
+{
+  "filesDirectory": "files/dir",
+  "aliases": {
+    "A": {
+      "pathFilter": "fileA.*"
+    },
+    "B": {
+      "pathFilter": "fileB.*"
+    },
+    "C": {
+      "pathFilter": "fileC.*"
+    }
+  },
+  "common": {
+    "staleTimeout": "PT1S",
+    "maxBatchSize": 100,
+    "maxPublicationDelay": "PT5S",
+    "leaveLastFileOpen": false,
+    "fixTimestamp": false,
+    "maxBatchesPerSecond": -1
+  },
+  "pullingInterval": "PT5S"
+}
