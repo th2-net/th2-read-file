@@ -19,8 +19,6 @@ package com.exactpro.th2.readfile;
 import static java.util.Comparator.comparing;
 
 import java.io.IOException;
-import java.io.LineNumberReader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Comparator;
@@ -34,7 +32,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +42,7 @@ import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.RawMessage;
+import com.exactpro.th2.common.grpc.RawMessage.Builder;
 import com.exactpro.th2.common.grpc.RawMessageBatch;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
@@ -55,10 +53,11 @@ import com.exactpro.th2.read.file.common.FileSourceWrapper;
 import com.exactpro.th2.read.file.common.MovedFileTracker;
 import com.exactpro.th2.read.file.common.StreamId;
 import com.exactpro.th2.read.file.common.impl.DefaultFileReader;
-import com.exactpro.th2.read.file.common.impl.RecoverableBufferedReaderWrapper;
 import com.exactpro.th2.read.file.common.state.impl.InMemoryReaderState;
 import com.exactpro.th2.readfile.cfg.FileReaderConfiguration;
-import com.exactpro.th2.readfile.impl.FileContentParser;
+import com.exactpro.th2.readfile.impl.FileBytesReader;
+import com.exactpro.th2.readfile.impl.FileParser;
+import com.exactpro.th2.readfile.impl.FileWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.kotlin.KotlinModule;
@@ -110,15 +109,15 @@ public class Main {
             EventID rootId = protoEvent.getId();
 
             CommonMetrics.setReadiness(true);
-            AbstractFileReader<LineNumberReader> reader = new DefaultFileReader.Builder<>(
+            AbstractFileReader<FileWrapper> reader = new DefaultFileReader.Builder<>(
                     configuration.getCommon(),
                     directoryChecker,
-                    new FileContentParser(),
+                    new FileParser(),
                     new MovedFileTracker(configuration.getFilesDirectory()),
                     new InMemoryReaderState(),
                     Main::createSource
             )
-                    .readFileImmediately()
+                    .readFileAfterStaleTimeout()
                     .acceptNewerFiles()
                     .onStreamData((streamId, builders) -> publishMessages(rawMessageBatchRouter, streamId, builders))
                     .onError((streamId, message, ex) -> publishErrorEvent(eventBatchRouter, streamId, message, ex, rootId))
@@ -177,7 +176,7 @@ public class Main {
     }
 
     @NotNull
-    private static Unit publishMessages(MessageRouter<RawMessageBatch> rawMessageBatchRouter, StreamId streamId, List<RawMessage.Builder> builders) {
+    private static Unit publishMessages(MessageRouter<RawMessageBatch> rawMessageBatchRouter, StreamId streamId, List<Builder> builders) {
         try {
             RawMessageBatch.Builder builder = RawMessageBatch.newBuilder();
             for (RawMessage.Builder msg : builders) {
@@ -190,12 +189,8 @@ public class Main {
         return Unit.INSTANCE;
     }
 
-    private static FileSourceWrapper<LineNumberReader> createSource(StreamId streamId, Path path) {
-        try {
-            return new RecoverableBufferedReaderWrapper(new LineNumberReader(Files.newBufferedReader(path)));
-        } catch (IOException e) {
-            return ExceptionUtils.rethrow(e);
-        }
+    private static FileSourceWrapper<FileWrapper> createSource(StreamId streamId, Path path) {
+        return new FileBytesReader<>(new FileWrapper(path));
     }
 
     private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
