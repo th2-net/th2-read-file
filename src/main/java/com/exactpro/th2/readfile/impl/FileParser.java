@@ -17,7 +17,6 @@
 package com.exactpro.th2.readfile.impl;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -43,12 +42,11 @@ public class FileParser implements ContentParser<FileWrapper> {
     @Override
     public @NotNull Collection<Builder> parse(@NotNull StreamId streamId, FileWrapper fileWrapper) {
         try {
-            byte[] bytes = Files.readAllBytes(fileWrapper.getPath());
+            byte[] bytes = fileWrapper.readAllBytes();
             Builder rawMessageBuilder = RawMessage.newBuilder().setBody(ByteString.copyFrom(bytes));
-            fileWrapper.setRead(true);
             return Collections.singletonList(rawMessageBuilder);
         } catch (IOException e) {
-            LOGGER.error("Error reading {} bytes", fileWrapper.getPath(), e);
+            LOGGER.error("Error parsing {}", fileWrapper.getPath(), e);
             return ExceptionUtils.rethrow(e);
         }
     }
