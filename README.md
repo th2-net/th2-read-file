@@ -1,4 +1,4 @@
-# File Reader User Manual 1.0.0
+# File Reader User Manual 1.1.0
 
 ## Document Information
 
@@ -88,6 +88,12 @@ spec:
 ```
 
 ## Changes
+
+### 1.1.0
++ th2-common upgrade to `3.44.0`
++ th2-bom upgrade to `4.1.0`
++ kotlin upgrade to `1.6.21`
++ vulnerability check pipeline step
 
 ### 1.0.0
 
