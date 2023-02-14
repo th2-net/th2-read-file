@@ -101,12 +101,7 @@ public class Main {
         }
 
         try {
-            Event rootEvent = Event.start().endTimestamp()
-                    .name("File reader for " + String.join(",", configuration.getAliases().keySet()))
-                    .type("Microservice");
-            var protoEvent = rootEvent.toProto(null);
-            eventBatchRouter.sendAll(EventBatch.newBuilder().addEvents(protoEvent).build());
-            EventID rootId = protoEvent.getId();
+            EventID rootId = commonFactory.getRootEventId();
 
             CommonMetrics.setReadiness(true);
             AbstractFileReader<FileWrapper> reader = new DefaultFileReader.Builder<>(
@@ -138,7 +133,7 @@ public class Main {
             ScheduledFuture<?> future = executorService.scheduleWithFixedDelay(reader::processUpdates, 0, configuration.getPullingInterval().toMillis(), TimeUnit.MILLISECONDS);
             awaitShutdown(lock, condition);
             future.cancel(true);
-        } catch (IOException | InterruptedException e) {
+        } catch (InterruptedException e) {
             LOGGER.error("Cannot read files from: {}", configuration.getFilesDirectory(), e);
         }
     }
