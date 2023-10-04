@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,18 +23,15 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
 
+import com.exactpro.th2.common.schema.factory.AbstractCommonFactory;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.module.kotlin.KotlinModule;
 
 class TestFileReaderConfiguration {
     @Test
     void testDeserializes() throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .registerModule(new KotlinModule());
+        ObjectMapper objectMapper = AbstractCommonFactory.MAPPER;
         try (var input = TestFileReaderConfiguration.class.getClassLoader().getResourceAsStream("test_cfg.json")) {
             FileReaderConfiguration cfg = objectMapper.readValue(input, FileReaderConfiguration.class);
             assertEquals(Path.of("files/dir").toString(), cfg.getFilesDirectory().toString());

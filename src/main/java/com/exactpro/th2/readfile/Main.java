@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.exactpro.th2.readfile;
 
 import static java.util.Comparator.comparing;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Comparator;
@@ -30,46 +29,41 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageGroup;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageId;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage;
+import com.exactpro.th2.read.file.common.impl.TransportDefaultFileReader;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.EventUtils;
-import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.RawMessage;
-import com.exactpro.th2.common.grpc.RawMessage.Builder;
-import com.exactpro.th2.common.grpc.RawMessageBatch;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.exactpro.th2.read.file.common.AbstractFileReader;
 import com.exactpro.th2.read.file.common.DirectoryChecker;
 import com.exactpro.th2.read.file.common.FileSourceWrapper;
 import com.exactpro.th2.read.file.common.MovedFileTracker;
 import com.exactpro.th2.read.file.common.StreamId;
-import com.exactpro.th2.read.file.common.impl.DefaultFileReader;
 import com.exactpro.th2.read.file.common.state.impl.InMemoryReaderState;
 import com.exactpro.th2.readfile.cfg.FileReaderConfiguration;
 import com.exactpro.th2.readfile.impl.FileBytesReader;
 import com.exactpro.th2.readfile.impl.FileParser;
 import com.exactpro.th2.readfile.impl.FileWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.module.kotlin.KotlinModule;
 
 import kotlin.Unit;
 
 public class Main {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .registerModule(new KotlinModule())
-            .registerModule(new JavaTimeModule());
 
     public static void main(String[] args) {
         Deque<AutoCloseable> toDispose = new ArrayDeque<>();
@@ -77,20 +71,20 @@ public class Main {
         var condition = lock.newCondition();
         configureShutdownHook(toDispose, lock, condition);
 
-        CommonMetrics.setLiveness(true);
+        CommonMetrics.LIVENESS_MONITOR.enable();
         CommonFactory commonFactory = CommonFactory.createFromArguments(args);
         toDispose.add(commonFactory);
 
-        MessageRouter<RawMessageBatch> rawMessageBatchRouter = commonFactory.getMessageRouterRawBatch();
+        MessageRouter<GroupBatch> messageRouter = commonFactory.getTransportGroupBatchRouter();
         MessageRouter<EventBatch> eventBatchRouter = commonFactory.getEventBatchRouter();
 
-        FileReaderConfiguration configuration = commonFactory.getCustomConfiguration(FileReaderConfiguration.class, MAPPER);
+        FileReaderConfiguration configuration = commonFactory.getCustomConfiguration(FileReaderConfiguration.class);
         Comparator<Path> pathComparator = comparing(it -> it.getFileName().toString(), String.CASE_INSENSITIVE_ORDER);
         var directoryChecker = new DirectoryChecker(
                 configuration.getFilesDirectory(),
                 (Path path) -> configuration.getAliases().entrySet().stream()
                         .filter(entry -> entry.getValue().getPathFilter().matcher(path.getFileName().toString()).matches())
-                        .map(it -> new StreamId(it.getKey(), Direction.FIRST))
+                        .map(it -> new StreamId(it.getKey()))
                         .collect(Collectors.toSet()),
                 files -> files.sort(pathComparator),
                 path -> true
@@ -100,23 +94,30 @@ public class Main {
             throw new IllegalArgumentException("Pulling interval " + configuration.getPullingInterval() + " must not be negative");
         }
 
+        String book = commonFactory.getBoxConfiguration().getBookName();
+        Supplier<GroupBatch.Builder> batchSupplier = () -> GroupBatch.builder().setBook(book);
+
         try {
             EventID rootId = commonFactory.getRootEventId();
 
-            CommonMetrics.setReadiness(true);
-            AbstractFileReader<FileWrapper> reader = new DefaultFileReader.Builder<>(
+            var reader = new TransportDefaultFileReader.Builder<>(
                     configuration.getCommon(),
                     directoryChecker,
                     new FileParser(),
                     new MovedFileTracker(configuration.getFilesDirectory()),
                     new InMemoryReaderState(),
+                    streamId -> MessageId.builder().setSessionAlias(streamId.getSessionAlias())
+                            .setDirection(Direction.INCOMING),
                     Main::createSource
             )
                     .readFileAfterStaleTimeout()
                     .acceptNewerFiles()
-                    .onStreamData((streamId, builders) -> publishMessages(rawMessageBatchRouter, streamId, builders))
-                    .onError((streamId, message, ex) -> publishErrorEvent(eventBatchRouter, streamId, message, ex, rootId))
-                    .onSourceCorrupted((streamId, path, e) -> publishSourceCorruptedEvent(eventBatchRouter, path, streamId, e, rootId))
+                    .onStreamData((streamId, builders) ->
+                            publishMessages(messageRouter, streamId, builders, batchSupplier))
+                    .onError((streamId, message, ex) ->
+                            publishErrorEvent(eventBatchRouter, streamId, message, ex, rootId))
+                    .onSourceCorrupted((streamId, path, ex) ->
+                            publishSourceCorruptedEvent(eventBatchRouter, path, streamId, ex, rootId))
                     .build();
 
             toDispose.add(reader);
@@ -131,6 +132,7 @@ public class Main {
             });
 
             ScheduledFuture<?> future = executorService.scheduleWithFixedDelay(reader::processUpdates, 0, configuration.getPullingInterval().toMillis(), TimeUnit.MILLISECONDS);
+            CommonMetrics.READINESS_MONITOR.enable();
             awaitShutdown(lock, condition);
             future.cancel(true);
         } catch (InterruptedException e) {
@@ -171,13 +173,21 @@ public class Main {
     }
 
     @NotNull
-    private static Unit publishMessages(MessageRouter<RawMessageBatch> rawMessageBatchRouter, StreamId streamId, List<Builder> builders) {
+    private static Unit publishMessages(
+            MessageRouter<GroupBatch> rawMessageBatchRouter,
+            StreamId streamId,
+            List<? extends RawMessage.Builder> builders,
+            Supplier<GroupBatch.Builder> batchSupplier
+    ) {
         try {
-            RawMessageBatch.Builder builder = RawMessageBatch.newBuilder();
-            for (RawMessage.Builder msg : builders) {
-                builder.addMessages(msg);
+            var batch = batchSupplier.get()
+                    .setSessionGroup(streamId.getSessionAlias());
+            for (var msg : builders) {
+                batch.addGroup(
+                        new MessageGroup(List.of(msg.build()))
+                );
             }
-            rawMessageBatchRouter.sendAll(builder.build());
+            rawMessageBatchRouter.sendAll(batch.build());
         } catch (Exception e) {
             LOGGER.error("Cannot publish batch for {}", streamId, e);
         }
@@ -191,7 +201,7 @@ public class Main {
     private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOGGER.info("Shutdown start");
-            CommonMetrics.setReadiness(false);
+            CommonMetrics.READINESS_MONITOR.disable();
             try {
                 lock.lock();
                 condition.signalAll();
@@ -206,7 +216,7 @@ public class Main {
                 }
             });
 
-            CommonMetrics.setLiveness(false);
+            CommonMetrics.LIVENESS_MONITOR.disable();
             LOGGER.info("Shutdown end");
         }, "Shutdown hook"));
     }
