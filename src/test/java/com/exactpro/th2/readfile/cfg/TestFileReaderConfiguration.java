@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.Set;
 
 import com.exactpro.th2.common.schema.factory.AbstractCommonFactory;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,7 +32,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 class TestFileReaderConfiguration {
     @Test
     void testDeserializes() throws IOException {
-        ObjectMapper objectMapper = AbstractCommonFactory.MAPPER;
+        // we suppress the warning because the CommonFactory updates the mapper from AbstractCommonFactory
+        // so, we need to access it via CommonFactory
+        @SuppressWarnings("StaticFieldReferencedViaSubclass")
+        ObjectMapper objectMapper = CommonFactory.MAPPER;
         try (var input = TestFileReaderConfiguration.class.getClassLoader().getResourceAsStream("test_cfg.json")) {
             FileReaderConfiguration cfg = objectMapper.readValue(input, FileReaderConfiguration.class);
             assertEquals(Path.of("files/dir").toString(), cfg.getFilesDirectory().toString());
