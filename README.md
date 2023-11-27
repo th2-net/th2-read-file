@@ -1,4 +1,4 @@
-# File Reader User Manual 2.0.0
+# File Reader User Manual 2.1.0
 
 ## Document Information
 
@@ -91,6 +91,15 @@ spec:
 ```
 
 ## Changes
+
+### 2.1.0
+
+#### Fixed:
+read-file throws the IndexOutOfBoundsException when prepare message for publishing 
+
+#### Updated:
+* common: `5.7.1-dev`
+* read-file-common-core: `3.1.0-dev`
 
 ### 2.0.0
 
