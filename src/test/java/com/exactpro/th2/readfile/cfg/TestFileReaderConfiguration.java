@@ -16,18 +16,16 @@
 
 package com.exactpro.th2.readfile.cfg;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
 
-import com.exactpro.th2.common.schema.factory.AbstractCommonFactory;
-import com.exactpro.th2.common.schema.factory.CommonFactory;
-import org.junit.jupiter.api.Test;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class TestFileReaderConfiguration {
     @Test
