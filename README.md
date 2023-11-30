@@ -1,4 +1,4 @@
-# File Reader User Manual 2.1.0
+# File Reader User Manual 2.2.0
 
 ## Document Information
 
@@ -91,6 +91,11 @@ spec:
 ```
 
 ## Changes
+
+### 2.2.0
+
+#### Updated:
+* read-file-common-core: `3.2.0-dev`
 
 ### 2.1.0
 
