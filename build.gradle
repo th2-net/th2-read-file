@@ -49,6 +49,5 @@ test {
 }
 
 application {
-    applicationName = "service"
     mainClass.set("com.exactpro.th2.readfile.Main")
 }
