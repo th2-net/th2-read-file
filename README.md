@@ -1,4 +1,4 @@
-# File Reader User Manual 2.2.0
+# File Reader User Manual 2.3.0
 
 ## Document Information
 
@@ -91,6 +91,15 @@ spec:
 ```
 
 ## Changes
+
+### 2.3.0
+
+#### Updated:
++ Migrate to th2 gradle plugin `0.0.6`
++ bom: `4.6.1`
++ common: `5.11.0-dev`
++ read-file-common-core: `3.3.0-dev`
++ jakarta.annotation-api: `3.0.0`
 
 ### 2.2.0
 
