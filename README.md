@@ -1,4 +1,4 @@
-# File Reader User Manual 2.3.0
+# File Reader User Manual 2.3.1
 
 ## Document Information
 
@@ -91,6 +91,11 @@ spec:
 ```
 
 ## Changes
+
+### 2.3.0
+
+#### Updated:
++ Migrate to th2 gradle plugin `0.0.7`
 
 ### 2.3.0
 
