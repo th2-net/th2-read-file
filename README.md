@@ -92,10 +92,10 @@ spec:
 
 ## Changes
 
-### 2.3.0
+### 2.3.1
 
 #### Updated:
-+ Migrate to th2 gradle plugin `0.0.7`
++ Migrate to th2 gradle plugin `0.0.8`
 
 ### 2.3.0
 
